@@ -1,5 +1,7 @@
+import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
+import PredictForm from "../PredictForm";
 
 interface AIModelsPageProps {
   onNavigateBack: () => void;
@@ -143,6 +145,11 @@ export function AIModelsPage({ onNavigateBack }: AIModelsPageProps) {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Prediction Form wired to FastAPI */}
+            <div className="mb-12">
+              <PredictForm />
+            </div>
 
             <div className="grid md:grid-cols-2 gap-8">
               <Card className="border-0 shadow-sm bg-white">
