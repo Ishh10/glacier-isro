@@ -10,6 +10,7 @@ import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import joblib
 import numpy as np
+import json # <-- ADDED
 
 def find_data():
     for p in ["../data/real_seasonal.csv", "../data/seasonal.csv"]:
@@ -58,6 +59,13 @@ print(f"MAE={mae:.3f}  RMSE={rmse:.3f}")
 
 joblib.dump(model, "model.joblib")
 print("Saved model.joblib")
+
+# NEW: Save performance metrics to a JSON file for the /model-performance endpoint
+metrics = {"mae": round(mae, 3), "rmse": round(rmse, 3)}
+Path("../runs").mkdir(parents=True, exist_ok=True)
+with open("../runs/model_performance.json", "w") as f:
+    json.dump(metrics, f)
+print("Wrote ../runs/model_performance.json")
 
 # Also emit a small preds.csv to ../runs for the dashboard
 out = test[["year","season"]].copy() if "year" in test.columns else test.copy()

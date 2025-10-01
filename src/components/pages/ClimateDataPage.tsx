@@ -1,11 +1,118 @@
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
+import { getClimateData } from "../../services/api"; // <-- Import API function
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"; // Assuming standard Shadcn table components
+import { Loader2 } from "lucide-react"; // Assuming lucide-react is used for icons
+import { ScrollArea } from "../ui/scroll-area"; // Assuming scroll-area component
 
 interface ClimateDataPageProps {
   onNavigateBack: () => void;
 }
 
+// Type definition for the data fetched from the backend (must match Python output)
+type SeasonalDataRow = {
+  year?: number; 
+  season?: string;
+  rain: number;
+  temp: number;
+  lag_discharge: number;
+  discharge: number; // Observed Discharge (Target)
+  [key: string]: any; 
+};
+
 export function ClimateDataPage({ onNavigateBack }: ClimateDataPageProps) {
+  const [data, setData] = useState<SeasonalDataRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Define columns for the table with keys matching the harmonized Python output
+  const tableColumns = [
+    { key: "year", label: "Year" },
+    { key: "season", label: "Season" },
+    { key: "temp", label: "Avg. Temp (°C)" },
+    { key: "rain", label: "Rainfall (mm)" },
+    { key: "lag_discharge", label: "Prev. Discharge (CMS)" },
+    { key: "discharge", label: "Obs. Discharge (CMS)" },
+  ];
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const rawData = await getClimateData();
+        setData(rawData as SeasonalDataRow[]);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch climate data:", err);
+        setError("Failed to load historical climate data. Ensure backend is running.");
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+  
+  const renderDataTable = () => {
+    if (loading) {
+      return <div className="text-center p-8"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /> <p className="mt-2 text-sm text-muted-foreground">Loading historical data...</p></div>;
+    }
+
+    if (error) {
+      return <p className="text-red-600 bg-red-50 p-4 border border-red-300 rounded text-center">{error}</p>;
+    }
+
+    if (data.length === 0) {
+      return <p className="text-center p-8 text-gray-500">No data available from the backend source.</p>;
+    }
+
+    // Filter to only include the keys defined in the tableColumns and actually present in data
+    const finalData = data.map(row => 
+        tableColumns.reduce((acc, col) => {
+            acc[col.key as keyof SeasonalDataRow] = row[col.key as keyof SeasonalDataRow];
+            return acc;
+        }, {} as SeasonalDataRow)
+    );
+    
+
+    return (
+        <ScrollArea className="h-[400px] w-full border rounded-lg shadow-md">
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 shadow-sm">
+                        <TableRow>
+                            {tableColumns.map((col) => (
+                                <TableHead key={col.key} className="text-primary font-bold whitespace-nowrap">
+                                    {col.label}
+                                </TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {finalData.map((row, index) => (
+                            <TableRow key={index} className="hover:bg-gray-50">
+                                {tableColumns.map((col) => (
+                                    <TableCell key={col.key} className="whitespace-nowrap text-sm">
+                                        {/* Format numbers for display, rounding decimals for clarity */}
+                                        {row[col.key as keyof SeasonalDataRow] !== undefined ? 
+                                            typeof row[col.key as keyof SeasonalDataRow] === 'number'
+                                                ? (row[col.key as keyof SeasonalDataRow] as number).toFixed(row[col.key as keyof SeasonalDataRow] > 100 ? 1 : 3)
+                                                : String(row[col.key as keyof SeasonalDataRow])
+                                            : 'N/A'
+                                        }
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </ScrollArea>
+    );
+  };
+    
   return (
     <div className="pt-16">
       <section className="py-20 bg-slate-50">
@@ -91,6 +198,20 @@ export function ClimateDataPage({ onNavigateBack }: ClimateDataPageProps) {
                 </CardContent>
               </Card>
             </div>
+
+            {/* NEW SECTION: Historical Data Table */}
+            <Card className="border-0 shadow-sm bg-white mb-12">
+                <CardHeader>
+                    <CardTitle>Historical Seasonal Data (Table View)</CardTitle>
+                    <CardDescription>
+                        This is the full raw data table served by the FastAPI `/climate-data` endpoint.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {renderDataTable()}
+                </CardContent>
+            </Card>
+
 
             <Card className="border-0 shadow-sm bg-white mb-12">
               <CardHeader>
