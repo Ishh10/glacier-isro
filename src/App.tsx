@@ -19,6 +19,7 @@ import { ResearchDashboardPage } from "./components/pages/ResearchDashboardPage"
 import { LiveDataCharts } from "./components/LiveDataCharts";
 import CsvCharts from "./components/CsvCharts";
 
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState("home");
 

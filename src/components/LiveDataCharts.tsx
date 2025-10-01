@@ -71,13 +71,15 @@ async function loadFloodRisk() {
       land_cover: (cols[idx.land] || "").trim(),
       flood_occurred: Number(cols[idx.flood]),
     };
+    // keep only finite rows
     if (
       Number.isFinite(obj.discharge_m3s) &&
       Number.isFinite(obj.waterlevel_m) &&
       Number.isFinite(obj.rainfall_mm)
     ) out.push(obj);
   }
-  return out.slice(0, 3000); // cap for perf
+  // sample (optional) if huge — here we keep up to 3000 for perf
+  return out.slice(0, 3000);
 }
 
 // Hypsometry: sum area across elevation bands and produce percent by elevation
@@ -91,13 +93,14 @@ async function loadHypsometry() {
   const rgiIdIdx = header.indexOf("rgi_id");
   const areaIdx = header.indexOf("area_km2");
 
+  // elevation band columns are numeric like "2325","2375",... Detect them:
   const elevCols = header
     .map((name, i) => ({ name, i }))
     .filter(o => !isNaN(Number(o.name)));
 
   let totalGlaciers = 0;
   let sumAreaAll = 0;
-  let sumByElev: Record<number, number> = {};
+  let sumByElev: Record<number, number> = {}; // elev(m) → area_km2 sum
 
   for (const line of lines) {
     const cols = line.split(",");
@@ -406,7 +409,7 @@ export function LiveDataCharts() {
                 </div>
                 <div className="text-center p-3 bg-blue-50 rounded">
                   <div className="font-medium text-blue-800">Data Source</div>
-                  <div className="text-sm font-semibold text-blue-900">delhi_monthly_weather_2000_2024.csv</div>
+                  <div className="text-sm font-semibold text-blue-900">india_2000_2024_daily_weather.csv</div>
                   <div className="text-blue-600">Monthly aggregate</div>
                 </div>
               </div>
@@ -466,7 +469,7 @@ export function LiveDataCharts() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="elev" tickFormatter={(v) => `${v}m`} />
                   <YAxis tickFormatter={(v) => `${v}%`} />
-                  <Tooltip formatter={(v: any) => [`${(v as number).toFixed(3)}%`, "Area Share"]} labelFormatter={(l) => `Elevation: ${l} m`} />
+                  <Tooltip formatter={(v: any, n: any) => [`${(v as number).toFixed(3)}%`, "Area Share"]} labelFormatter={(l) => `Elevation: ${l} m`} />
                   <Legend />
                   <Area type="monotone" dataKey="area_pct" name="Area Share (%)" fill="#93c5fd" stroke="#3b82f6" fillOpacity={0.4} />
                 </AreaChart>

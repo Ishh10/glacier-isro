@@ -2,9 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ScatterChart, Scatter, ZAxis, BarChart, Bar, AreaChart, Area
+  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ScatterChart, Scatter, ZAxis,
+  BarChart, Bar,
+  AreaChart, Area
 } from "recharts";
+
+/* -------------------- Types -------------------- */
+type WeatherRow = { date: string; precipitation_sum: number; temperature_2m_max: number };
+type FloodRow = { discharge_m3s: number; waterlevel_m: number; soil_type: string; flood_occurred: 0 | 1 };
+type HypsRow = { elev: number; area_pct: number };
 
 /* -------------------- CSV helpers -------------------- */
 function parseCSV(text: string) {
@@ -27,39 +35,45 @@ async function load(path: string) {
 /* -------------------- Loaders for your 3 datasets -------------------- */
 
 // 1) Delhi monthly weather (columns: month, precipitation_sum, temperature_2m_max)
-async function loadDelhiWeather() {
+async function loadDelhiWeather(): Promise<WeatherRow[]> {
   const rows = await load("/data/delhi_monthly_weather_2000_2024.csv");
-  const out = rows.map(r => {
-    const iso = r["month"]; // e.g., 2000-01-01 or 2000-01
-    const date = new Date(iso).toISOString().slice(0, 7); // YYYY-MM
-    return {
-      date,
-      precipitation_sum: Number(r["precipitation_sum"]),
-      temperature_2m_max: Number(r["temperature_2m_max"]),
-    };
-  }).filter(d => Number.isFinite(d.precipitation_sum) && Number.isFinite(d.temperature_2m_max));
-  return out.sort((a, b) => a.date.localeCompare(b.date));
+  const out: WeatherRow[] = rows
+    .map((r) => {
+      const iso = r["month"];
+      const d = new Date(iso);
+      const date = isNaN(d.getTime()) ? String(iso).slice(0, 7) : d.toISOString().slice(0, 7);
+      return {
+        date,
+        precipitation_sum: Number(r["precipitation_sum"]),
+        temperature_2m_max: Number(r["temperature_2m_max"]),
+      };
+    })
+    .filter((d) => Number.isFinite(d.precipitation_sum) && Number.isFinite(d.temperature_2m_max))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }
 
 // 2) Flood risk (uses exact headers from your CSV)
-async function loadFloodRisk() {
+async function loadFloodRisk(): Promise<FloodRow[]> {
   const rows = await load("/data/flood_risk_dataset_india.csv");
-  const out = rows.map(r => ({
-    discharge_m3s: Number(r["River Discharge (m³/s)"]),
-    waterlevel_m: Number(r["Water Level (m)"]),
-    soil_type: r["Soil Type"] || "Unknown",
-    flood_occurred: Number(r["Flood Occurred"]) === 1 || r["Flood Occurred"] === "1" ? 1 : 0,
-  })).filter(d => Number.isFinite(d.discharge_m3s) && Number.isFinite(d.waterlevel_m));
+  const out: FloodRow[] = rows
+    .map((r) => ({
+      discharge_m3s: Number(r["River Discharge (m³/s)"]),
+      waterlevel_m: Number(r["Water Level (m)"]),
+      soil_type: r["Soil Type"] || "Unknown",
+      flood_occurred: (r["Flood Occurred"] === "1" || Number(r["Flood Occurred"]) === 1 ? 1 : 0) as 0 | 1,
+    }))
+    .filter((d) => Number.isFinite(d.discharge_m3s) && Number.isFinite(d.waterlevel_m));
   return out;
 }
 
 // 3) Hypsometry — sum area share by elevation band columns (numeric headers)
-async function loadHypsometry() {
+async function loadHypsometry(): Promise<HypsRow[]> {
   const rows = await load("/data/RGI2000-v7.0-G-14_south_asia_west-hypsometry.csv");
   if (rows.length === 0) return [];
 
   const headers = Object.keys(rows[0]);
-  const elevCols = headers.filter(h => !isNaN(Number(h))); // "2300","2350",...
+  const elevCols = headers.filter((h) => !isNaN(Number(h))); // "2300","2350",...
   let sumAreaAll = 0;
   const sumByElev: Record<number, number> = {};
 
@@ -73,12 +87,12 @@ async function loadHypsometry() {
     }
   }
 
-  const curve = Object.keys(sumByElev)
+  const curve: HypsRow[] = Object.keys(sumByElev)
     .map(Number)
     .sort((a, b) => a - b)
-    .map(elev => ({
+    .map((elev) => ({
       elev,
-      area_pct: sumAreaAll > 0 ? (sumByElev[elev] / sumAreaAll) * 100 : 0
+      area_pct: sumAreaAll > 0 ? (sumByElev[elev] / sumAreaAll) * 100 : 0,
     }));
 
   return curve;
@@ -87,19 +101,15 @@ async function loadHypsometry() {
 /* -------------------- Component -------------------- */
 
 export default function CsvCharts() {
-  const [weather, setWeather] = useState<{date:string; precipitation_sum:number; temperature_2m_max:number}[]>([]);
-  const [flood, setFlood] = useState<{discharge_m3s:number; waterlevel_m:number; soil_type:string; flood_occurred:1|0}[]>([]);
-  const [hyps, setHyps] = useState<{elev:number; area_pct:number}[]>([]);
+  const [weather, setWeather] = useState<WeatherRow[]>([]);
+  const [flood, setFlood] = useState<FloodRow[]>([]);
+  const [hyps, setHyps] = useState<HypsRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [w, f, h] = await Promise.all([
-          loadDelhiWeather(),
-          loadFloodRisk(),
-          loadHypsometry()
-        ]);
+        const [w, f, h] = await Promise.all([loadDelhiWeather(), loadFloodRisk(), loadHypsometry()]);
         setWeather(w);
         setFlood(f);
         setHyps(h);
@@ -110,17 +120,17 @@ export default function CsvCharts() {
     })();
   }, []);
 
-  const floodYes = useMemo(() => flood.filter(d => d.flood_occurred === 1).slice(0, 2000), [flood]);
-  const floodNo  = useMemo(() => flood.filter(d => d.flood_occurred === 0).slice(0, 2000), [flood]);
+  const floodYes = useMemo(() => flood.filter((d) => d.flood_occurred === 1).slice(0, 2000), [flood]);
+  const floodNo = useMemo(() => flood.filter((d) => d.flood_occurred === 0).slice(0, 2000), [flood]);
 
   const floodBySoil = useMemo(() => {
-    const agg: Record<string, {soil:string; floods:number}> = {};
+    const agg: Record<string, { soil: string; floods: number }> = {};
     for (const d of flood) {
       const k = d.soil_type || "Unknown";
       if (!agg[k]) agg[k] = { soil: k, floods: 0 };
       agg[k].floods += d.flood_occurred ? 1 : 0;
     }
-    return Object.values(agg).sort((a,b)=>b.floods - a.floods).slice(0,6);
+    return Object.values(agg).sort((a, b) => b.floods - a.floods).slice(0, 6);
   }, [flood]);
 
   return (
@@ -185,7 +195,7 @@ export default function CsvCharts() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" dataKey="discharge_m3s" name="Discharge" unit=" m³/s" />
                       <YAxis type="number" dataKey="waterlevel_m" name="Water Level" unit=" m" />
-                      <ZAxis range={[60,60]} />
+                      <ZAxis range={[60, 60]} />
                       <Tooltip />
                       <Legend />
                       <Scatter name="No Flood" data={floodNo} fill="#38bdf8" />
@@ -223,8 +233,8 @@ export default function CsvCharts() {
                 <ResponsiveContainer width="100%" height={380}>
                   <AreaChart data={hyps}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="elev" tickFormatter={(v)=>`${v} m`} />
-                    <YAxis tickFormatter={(v)=>`${v}%`} />
+                    <XAxis dataKey="elev" tickFormatter={(v) => `${v} m`} />
+                    <YAxis tickFormatter={(v) => `${v}%`} />
                     <Tooltip />
                     <Legend />
                     <Area type="monotone" dataKey="area_pct" name="Area Share (%)" stroke="#3b82f6" fill="#93c5fd" fillOpacity={0.4} />
