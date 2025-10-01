@@ -6,10 +6,11 @@
 
 import pandas as pd
 from pathlib import Path
-from sklearn.ensemble import RandomForestRegressor
+import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import joblib
 import numpy as np
+import json # <-- ADDED
 
 def find_data():
     for p in ["../data/real_seasonal.csv", "../data/seasonal.csv"]:
@@ -48,16 +49,23 @@ test  = df.iloc[-6:]
 Xtr, ytr = train[["rain","temp","lag_discharge"]], train["discharge"]
 Xte, yte = test[["rain","temp","lag_discharge"]], test["discharge"]
 
-model = RandomForestRegressor(n_estimators=400, max_depth=6, random_state=42, n_jobs=-1)
+model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=400, max_depth=5, learning_rate=0.05, random_state=42, n_jobs=-1)
 model.fit(Xtr, ytr)
 pred = model.predict(Xte)
 
 mae = mean_absolute_error(yte, pred)
-rmse = mean_squared_error(yte, pred, squared=False)
+rmse = np.sqrt(mean_squared_error(yte, pred))
 print(f"MAE={mae:.3f}  RMSE={rmse:.3f}")
 
 joblib.dump(model, "model.joblib")
 print("Saved model.joblib")
+
+# NEW: Save performance metrics to a JSON file for the /model-performance endpoint
+metrics = {"mae": round(mae, 3), "rmse": round(rmse, 3)}
+Path("../runs").mkdir(parents=True, exist_ok=True)
+with open("../runs/model_performance.json", "w") as f:
+    json.dump(metrics, f)
+print("Wrote ../runs/model_performance.json")
 
 # Also emit a small preds.csv to ../runs for the dashboard
 out = test[["year","season"]].copy() if "year" in test.columns else test.copy()
